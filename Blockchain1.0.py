@@ -1,17 +1,22 @@
-# Import Flask and other required modules
+# In this code we will be going to implement over multiple host
+'''
+Endpoints:
+/mineBlock (GET): Mines a new block and adds it to the blockchain.
+/getChain (GET): Returns the entire blockchain.
+/isValidChain (GET): Checks if the blockchain is valid.
+/addTransaction (POST): Adds a new transaction to the pending transactions list.
+/connectNode (POST): Connects to a new node in the network.
+/getNodes (GET): Returns the list of connected nodes.
+'''
 import datetime
 import hashlib
 import json
-from flask import Flask, jsonify, request, render_template  # Import render_template
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 from uuid import uuid4
 from urllib.parse import urlparse
 
-# Create a Flask app instance
-app = Flask(__name__)
-CORS(app)
 
-# Define the Blockchain class and other functionalities as before...
 class Blockchain:
     def __init__(self):
         self.chain = []
@@ -95,55 +100,91 @@ class Blockchain:
             return True
         return False
 
-# Instantiate the Blockchain class
-blockchain = Blockchain()
 
-# Define routes
+blockchain = Blockchain()
+app = Flask(__name__)
+CORS(app)
+node_address = str(uuid4()).replace('-', '')  # Generate a unique node address
+
+
+@app.route('/mineBlock', methods=["GET"])
+def mine_block():
+    previous_block = blockchain.get_previous_block()
+    previous_proof = previous_block['proof']
+    proof = blockchain.proof_of_work(previous_proof)
+    blockchain.add_transaction(sender="0", receiver=node_address, amount=1)  # Reward for mining
+    block = blockchain.create_block(proof, blockchain.hash(previous_block))
+    response = {
+        'message': "Congratulations! You mined a block!",
+        'block': block
+    }
+    return jsonify(response), 200
+
+@app.route('/getChain', methods=["GET"])
+def get_chain():
+    response = {
+        'chain': blockchain.chain,
+        'length': len(blockchain.chain)
+    }
+    return jsonify(response), 200
+
+@app.route('/isValidChain', methods=["GET"])
+def is_valid_chain():
+    is_valid = blockchain.is_valid_chain(blockchain.chain)
+    response = {
+        'message': "The chain is valid" if is_valid else "The chain is not valid"
+    }
+    return jsonify(response), 200
+
+@app.route('/addTransaction', methods=["POST"])
+def add_transaction():
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({'message': 'No JSON data provided'}), 400
+
+    sender = json_data.get('sender')
+    receiver = json_data.get('receiver')
+    amount = json_data.get('amount')
+
+    if not all([sender, receiver, amount]):
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    if blockchain.add_transaction(sender, receiver, amount):
+        response = {'message': 'Transaction added successfully'}
+        return jsonify(response), 201
+    else:
+        response = {'message': 'Failed to add transaction'}
+        return jsonify(response), 500
+
+@app.route('/connectNode', methods=["POST"])
+def connect_node():
+    json_data = request.get_json()
+    nodes = json_data.get('nodes')
+    if not nodes:
+        response = {'message': 'No nodes provided'}
+        return jsonify(response), 400
+    for node in nodes:
+        blockchain.add_node(node)
+    response = {
+        'message': 'Nodes added successfully',
+        'total_nodes': list(blockchain.nodes)
+    }
+    return jsonify(response), 201
+
+@app.route('/getNodes', methods=["GET"])
+def get_nodes():
+    response = {
+        'nodes': list(blockchain.nodes)
+    }
+    return jsonify(response), 200
+
 @app.route('/')
 def index():
-    return render_template('index.html')  # Serve the HTML file
+    return render_template('index.html')
 
-@app.route('/mineBlock')
-def mine_block():
-    return render_template('mineBlock.html')
-
-@app.route('/getChain')
-def get_chain():
-    return render_template('getChain.html')
-
-@app.route('/isValidChain')
-def is_valid_chain():
-    return render_template('isValidChain.html')
-
-@app.route('/addTransaction', methods=['GET', 'POST'])
-def add_transaction():
-    if request.method == 'POST':
-        # Process the form submission
-        sender = request.form.get('sender')
-        receiver = request.form.get('receiver')
-        amount = request.form.get('amount')
-        # Perform the transaction processing logic
-        return render_template('transactionSuccess.html')  # Render a success page
-    else:
-        return render_template('addTransaction.html')
-
-@app.route('/connectNode', methods=['GET', 'POST'])
-def connect_node():
-    if request.method == 'POST':
-        # Process the form submission
-        node_url = request.form.get('node')
-        # Perform the node connection logic
-        return render_template('nodeConnected.html')  # Render a success page
-    else:
-        return render_template('connectNode.html')
-
-@app.route('/getNodes')
-def get_nodes():
-    return render_template('getNodes.html')
-
-# Run the Flask app
 if __name__ == "__main__":
     from argparse import ArgumentParser
+
     parser = ArgumentParser()
     parser.add_argument('-p', '--port', default=8000, type=int, help='port to listen on')
     args = parser.parse_args()
